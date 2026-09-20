@@ -2,7 +2,11 @@
 
 InputHandler::InputHandler()
     : touchSpi(VSPI), ts(XPT2046_CS, XPT2046_IRQ), last_btn_state(true),
-      last_touch_state(false), show_debug(false), wireframe_mode(false),
+      // show_debug starts true while streak behavior is under active
+      // development (screen dumps rely on the debug overlay for the
+      // AXIS_T/ZONE readout and anchor marker) — flip back to false once
+      // this settles down.
+      last_touch_state(false), show_debug(true), wireframe_mode(false),
       vertical_dir(0), last_touch_time(0), brightness_idx(3) {}
 
 void InputHandler::begin() {

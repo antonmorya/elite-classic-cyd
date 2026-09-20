@@ -7,5 +7,6 @@
 void updateRotationParams(float ax, float ay, float az);
 Point3D rotateFast(Point3D p);
 Point2D project(Point3D p, float global_x, float global_y, float global_z);
+float getFov();
 
 #endif

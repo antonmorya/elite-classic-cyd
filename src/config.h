@@ -36,7 +36,8 @@ const int NUM_TENTACLES = 12;
 const int TENTACLE_SEGMENTS = 8;
 const int NUM_BELL_VERTICES = BELL_RINGS * BELL_POINTS_PER_RING + 1;
 
-// Particle layers
+// Particle layers — each count is its own knob, tweak freely (also see
+// FAR_SPEED_SCALE in main.cpp for the far layer's speed).
 #define NUM_FAR 11
 #define NUM_MID 11
 #define NUM_NEAR 7

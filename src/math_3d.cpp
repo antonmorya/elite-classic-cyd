@@ -32,6 +32,8 @@ Point3D rotateFast(Point3D p) {
     return res;
 }
 
+float getFov() { return fov; }
+
 Point2D project(Point3D p, float global_x, float global_y, float global_z) {
     Point2D p2;
     float world_z = camera_dist + p.z + global_z;

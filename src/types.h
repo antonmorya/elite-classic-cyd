@@ -26,6 +26,14 @@ struct Particle {
     float speed;
     uint8_t layer;      // 0 = far, 1 = mid, 2 = near
     uint8_t brightness; // far only: varies per-dot; mid/near use a fixed color
+    // Motion mode, fixed at spawn and never changed mid-flight (only the
+    // next spawn picks a fresh one) — see spawnParticle() in main.cpp.
+    // 0 = linear: shared heading (hdx,hdy).
+    // 1 = radial: own fixed (dirx,diry), bursting outward from an anchor
+    //     point (screen center when approaching, the nose-direction "zone"
+    //     when receding) until it leaves the layer's box.
+    uint8_t mode;
+    float dirx, diry; // used only when mode != 0
 };
 
 #endif
