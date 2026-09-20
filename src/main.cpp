@@ -16,6 +16,11 @@ TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite canvas = TFT_eSprite(&tft);
 InputHandler input;
 
+// Testing toggle: false freezes the ship's own slow autonomous yaw spin, so
+// the view stays put while streak behavior is tuned. Flip back to true when
+// done testing.
+const bool AUTO_ROTATE = false;
+
 // Global state
 ColorMode current_mode = PURPLE;
 float phase = 0;
@@ -30,6 +35,57 @@ unsigned long last_frame_time = 0;
 float current_fps = 0;
 
 Particle particles[NUM_PARTICLES];
+
+// Near streaks spawn/despawn inset from the true screen edges by this
+// padding — a fifth of each dimension, applied separately per axis (the
+// screen isn't square, so a single margin distorts one axis or the other).
+const int NEAR_MARGIN_X = SCREEN_WIDTH / 5;
+const int NEAR_MARGIN_Y = SCREEN_HEIGHT / 5;
+
+// Places a near streak ON the perimeter of the inset rectangle (not
+// anywhere inside it) — that boundary is both where these streaks spawn and
+// where they despawn, so they're always seen crossing the ship's
+// neighbourhood rather than popping in partway across it.
+//
+// (dx, dy) is the current flow direction; only an edge the flow actually
+// enters through is eligible. Spawning on an edge it's about to exit
+// through instead made the streak cross back out on the very next frame —
+// a one-frame flicker right at that edge. Pass (0,0) when there's no flow
+// direction yet (e.g. the very first spawn at boot) to allow any edge.
+static void spawnNearOnEdge(Particle &p, float dx, float dy)
+{
+    int innerW = SCREEN_WIDTH - 2 * NEAR_MARGIN_X;
+    int innerH = SCREEN_HEIGHT - 2 * NEAR_MARGIN_Y;
+
+    bool canLeft = dx >= 0.0f, canRight = dx <= 0.0f;
+    bool canTop = dy >= 0.0f, canBottom = dy <= 0.0f;
+    if (dx == 0.0f && dy == 0.0f) canLeft = canRight = canTop = canBottom = true;
+
+    int choices[4], n = 0;
+    if (canLeft) choices[n++] = 0;
+    if (canRight) choices[n++] = 1;
+    if (canTop) choices[n++] = 2;
+    if (canBottom) choices[n++] = 3;
+
+    switch (choices[random(0, n)]) {
+        case 0: // left
+            p.x = NEAR_MARGIN_X;
+            p.y = NEAR_MARGIN_Y + random(0, innerH);
+            break;
+        case 1: // right
+            p.x = SCREEN_WIDTH - NEAR_MARGIN_X;
+            p.y = NEAR_MARGIN_Y + random(0, innerH);
+            break;
+        case 2: // top
+            p.x = NEAR_MARGIN_X + random(0, innerW);
+            p.y = NEAR_MARGIN_Y;
+            break;
+        default: // bottom
+            p.x = NEAR_MARGIN_X + random(0, innerW);
+            p.y = SCREEN_HEIGHT - NEAR_MARGIN_Y;
+            break;
+    }
+}
 
 void setup()
 {
@@ -70,20 +126,26 @@ void setup()
     // Distribute streaks across the ENTIRE screen (not a disk around the ship).
     // Direction is NOT per-streak — all of them share the exact same heading
     // vector (set in loop()), so they read as one strictly parallel motion
-    // cue. Three depth layers (far/mid/near), split evenly: far dots vary in
-    // brightness (a speckled background, barely creeping); mid is a single
-    // fixed dim gray, noticeably faster; near is white and fast — for
-    // mid/near, speed carries the distinction, not color.
+    // cue. Three depth layers: far dots vary in brightness (a speckled
+    // background, barely creeping); mid is a single fixed dim gray,
+    // noticeably faster; near is white, fast, and few — a handful of close
+    // streaks around the ship rather than a full layer.
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        particles[i].x = random(0, SCREEN_WIDTH);
-        particles[i].y = random(0, SCREEN_HEIGHT);
-        particles[i].layer = i % 3;
+        particles[i].layer = (i < NUM_FAR) ? 0 : (i < NUM_FAR + NUM_MID) ? 1 : 2;
+        // Near spawns ON the edge of its inset rectangle (see spawnNearOnEdge);
+        // far/mid spawn anywhere and later wrap edge-to-edge, same as always.
+        if (particles[i].layer == 2) {
+            spawnNearOnEdge(particles[i], 0.0f, 0.0f); // no flow direction yet at boot
+        } else {
+            particles[i].x = random(0, SCREEN_WIDTH);
+            particles[i].y = random(0, SCREEN_HEIGHT);
+        }
         particles[i].brightness = random(50, 170); // used by the far layer only
         switch (particles[i].layer) {
-            case 0: particles[i].speed = random(1, 4) / 10.0f; break;    // far: 0.1 - 0.3
-            case 1: particles[i].speed = random(6, 12) / 10.0f; break;   // mid: 0.6 - 1.1
-            default: particles[i].speed = random(15, 28) / 10.0f; break; // near: 1.5 - 2.7
+            case 0: particles[i].speed = random(2, 7) / 10.0f; break;    // far: 0.2 - 0.6
+            case 1: particles[i].speed = random(11, 20) / 10.0f; break;  // mid: 1.1 - 2.0
+            default: particles[i].speed = random(26, 45) / 10.0f; break; // near: 2.6 - 4.5
         }
     }
 }
@@ -118,18 +180,29 @@ void loop()
     }
     // Smoothly interpolate current speed to target
     rotation_speed += (target_rotation_speed - rotation_speed) * 0.005f;
-    angle_y += rotation_speed;
+    if (AUTO_ROTATE) angle_y += rotation_speed;
 
     // Ship stays centered and only rotates — global_x/y/z_offset stay at
     // their 0 default (screen drift and camera zoom motion are disabled).
 
+    // Recompute rotation first — we reuse it to find where the nose points.
     updateRotationParams(angle_x, angle_y, angle_z);
 
-    // Flow direction is fixed (straight up the screen) — tying it to the
-    // ship's nose orientation was tried and removed: now that streaks are
-    // plain dots with no orientation to show, there was nothing left for
-    // that ship-relative direction to actually do.
-    const float hdx = 0.0f, hdy = -1.0f;
+    // Flow direction = the ship's nose-to-tail axis, projected to screen
+    // (perspective divide only changes its length, not its direction, so
+    // it's skipped). One shared direction for every streak in every layer —
+    // a radial (toward/away-from-center) blend for the axial "nose at/away
+    // from camera" case was tried and dropped: it made every layer's
+    // motion visibly non-linear (each streak nudged by its own fixed
+    // per-particle radial component), which is exactly what a "speed
+    // direction" cue must not do.
+    Point3D nose_r = rotateFast(Point3D{ 32.0f, -1.0f, 58.0f }); // cobra_vertices[0], recentred
+    float raw_x = -nose_r.x;   // travel direction: nose -> tail
+    float raw_y = -nose_r.y;
+    float in_plane_len = sqrtf(raw_x * raw_x + raw_y * raw_y);
+    float hdx, hdy;
+    if (in_plane_len < 1e-3f) { hdx = 0.0f; hdy = 1.0f; }   // nose aimed straight at camera
+    else { hdx = raw_x / in_plane_len; hdy = raw_y / in_plane_len; }
 
     int v_dir = input.getVerticalDir();
     const float flow_scale = (v_dir == -1) ? 4.0f : (v_dir == 1) ? -2.5f : 1.0f;
@@ -145,18 +218,29 @@ void loop()
     {
         for (int i = 0; i < NUM_PARTICLES; i++)
         {
-            // All streaks share the exact same direction — the heading —
-            // so they read unambiguously as ONE motion vector, not a hint
-            // of one buried in per-streak noise.
+            // Every layer flies the same plain linear heading — no radial
+            // blend for anyone now (see the flow-direction comment above).
             float spd = particles[i].speed * flow_scale;
             particles[i].x += hdx * spd;
             particles[i].y += hdy * spd;
 
-            // Toroidal wrap: re-enter from the opposite edge.
-            if (particles[i].x < 0) particles[i].x += SCREEN_WIDTH;
-            else if (particles[i].x >= SCREEN_WIDTH) particles[i].x -= SCREEN_WIDTH;
-            if (particles[i].y < 0) particles[i].y += SCREEN_HEIGHT;
-            else if (particles[i].y >= SCREEN_HEIGHT) particles[i].y -= SCREEN_HEIGHT;
+            if (particles[i].layer == 2) {
+                // Near: once past the inset rectangle, respawn ON its
+                // perimeter (see spawnNearOnEdge) — never inside it. That
+                // rectangle's edge is both the spawn and despawn boundary,
+                // so a streak is always seen crossing the ship's
+                // neighbourhood, never popping in partway across it.
+                if (particles[i].x < NEAR_MARGIN_X || particles[i].x >= SCREEN_WIDTH - NEAR_MARGIN_X ||
+                    particles[i].y < NEAR_MARGIN_Y || particles[i].y >= SCREEN_HEIGHT - NEAR_MARGIN_Y) {
+                    spawnNearOnEdge(particles[i], hdx, hdy);
+                }
+            } else {
+                // Far/mid: plain toroidal wrap, edge to edge — unchanged.
+                if (particles[i].x < 0) particles[i].x += SCREEN_WIDTH;
+                else if (particles[i].x >= SCREEN_WIDTH) particles[i].x -= SCREEN_WIDTH;
+                if (particles[i].y < 0) particles[i].y += SCREEN_HEIGHT;
+                else if (particles[i].y >= SCREEN_HEIGHT) particles[i].y -= SCREEN_HEIGHT;
+            }
 
             int hx = (int)particles[i].x;
             int hy = (int)particles[i].y;
