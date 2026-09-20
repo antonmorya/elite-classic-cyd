@@ -4,6 +4,11 @@
 #include "config.h"
 #include "types.h"
 
+// Perspective projection constants — defined in main.cpp alongside the
+// other tuning knobs, since that's where they're meant to be tweaked from.
+extern float FOV;
+extern float CAMERA_DIST;
+
 void updateRotationParams(float ax, float ay, float az);
 Point3D rotateFast(Point3D p);
 Point2D project(Point3D p, float global_x, float global_y, float global_z);

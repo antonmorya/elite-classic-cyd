@@ -2,8 +2,6 @@
 #include <math.h>
 
 static float sx, cx, sy, cy, sz, cz;
-static const float fov = 160.0f;
-static const float camera_dist = 500.0f;
 
 void updateRotationParams(float ax, float ay, float az) {
     sx = sinf(ax);
@@ -32,16 +30,16 @@ Point3D rotateFast(Point3D p) {
     return res;
 }
 
-float getFov() { return fov; }
+float getFov() { return FOV; }
 
 Point2D project(Point3D p, float global_x, float global_y, float global_z) {
     Point2D p2;
-    float world_z = camera_dist + p.z + global_z;
+    float world_z = CAMERA_DIST + p.z + global_z;
     if(world_z < 20.0f) {
         p2.valid = false;
         return p2;
     }
-    float scale = fov / world_z;
+    float scale = FOV / world_z;
     p2.x = (int)(SCREEN_WIDTH / 2 + (p.x + global_x) * scale);
     p2.y = (int)(SCREEN_HEIGHT / 2 + (p.y + global_y) * scale);
     p2.z = world_z; // Store depth

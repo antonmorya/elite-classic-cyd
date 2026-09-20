@@ -34,6 +34,10 @@ struct Particle {
     //     when receding) until it leaves the layer's box.
     uint8_t mode;
     float dirx, diry; // used only when mode != 0
+    // far/mid only: coin-flip at spawn between the layer's normal color and
+    // plain white, so the layer reads as a random mix of both rather than
+    // one uniform shade.
+    bool useWhite;
 };
 
 #endif

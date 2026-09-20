@@ -17,28 +17,53 @@ TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite canvas = TFT_eSprite(&tft);
 InputHandler input;
 
+// ============================================================================
+// PARTICLE TUNING — SPEED and behavior (this section). COUNTS
+// (NUM_FAR/NUM_MID/NUM_NEAR and their *_COUNT_SCALE knobs) live in
+// config.h instead, because they size the particles[] array at compile
+// time and config.h is what everything else includes. AXIS_RADIAL_THRESHOLD
+// and NEAR_MARGIN_X/Y are further down this file, near the code that uses
+// them (spawnParticle / spawnNearOnEdge).
+// ============================================================================
+
 // Testing toggle: false freezes the ship's own slow autonomous yaw spin, so
 // the view stays put while streak behavior is tuned. Flip back to true when
 // done testing.
 const bool AUTO_ROTATE = false;
 
-// Testing toggle: false skips updating/drawing near streaks entirely, while
-// the radial (axial-view) behavior is tuned for far/mid only. Flip back to
-// true once near rejoins the radial redesign.
-const bool SHOW_NEAR = false;
+// Testing toggle: false skips updating/drawing near streaks entirely. Now
+// true — near rejoins far/mid in the radial redesign.
+const bool SHOW_NEAR = true;
 
 // Testing toggle: true gives every particle its own fixed color by array
 // index instead of the normal layer-based scheme. A single screen dump is a
 // still frame with no motion in it — two dumps a beat apart, with each dot
 // individually identifiable, let a direction be read off from how far (and
-// which way) each SPECIFIC dot moved between them. Flip back to false once
-// streak behavior settles.
-const bool DEBUG_UNIQUE_COLORS = true;
+// which way) each SPECIFIC dot moved between them. Now false — all three
+// layers show their real look; flip back to true only if a direction needs
+// diagnosing again.
+const bool DEBUG_UNIQUE_COLORS = false;
 
 // Tuning knob: multiplies the far layer's base speed range (0.2-0.6
 // px/frame at 1.0x). Play with this to slow down / speed up just the far
 // background layer.
 const float FAR_SPEED_SCALE = 0.05f;
+
+// Same knob for the mid layer's base speed range (1.1-2.0 px/frame at
+// 1.0x). (Each layer's count is its own knob too — NUM_FAR/NUM_MID/NUM_NEAR
+// in config.h.)
+const float MID_SPEED_SCALE = 0.4f;
+
+// Same knob for the near layer's base speed range (2.6-4.5 px/frame at
+// 1.0x).
+const float NEAR_SPEED_SCALE = 1.6f;
+
+// Perspective projection tuning (used by project() in math_3d.cpp): FOV is
+// a scale factor, not degrees — bigger means a stronger zoom/perspective
+// effect. CAMERA_DIST is how far the camera sits from the object; bigger
+// means "further away" (flatter, less perspective distortion).
+float FOV = 200.0f;
+float CAMERA_DIST = 500.0f;
 
 // Global state
 ColorMode current_mode = PURPLE;
@@ -56,10 +81,11 @@ float current_fps = 0;
 Particle particles[NUM_PARTICLES];
 
 // Near streaks spawn/despawn inset from the true screen edges by this
-// padding — a fifth of each dimension, applied separately per axis (the
-// screen isn't square, so a single margin distorts one axis or the other).
-const int NEAR_MARGIN_X = SCREEN_WIDTH / 5;
-const int NEAR_MARGIN_Y = SCREEN_HEIGHT / 5;
+// padding, applied separately per axis (the screen isn't square, so a
+// single margin distorts one axis or the other). 0 = no inset, full screen
+// like far/mid.
+const int NEAR_MARGIN_X = 0;
+const int NEAR_MARGIN_Y = 0;
 
 // Places a near streak ON the perimeter of the inset rectangle (not
 // anywhere inside it) — that boundary is both where these streaks spawn and
@@ -108,7 +134,9 @@ static void spawnNearOnEdge(Particle &p, float dx, float dy)
 
 // Below this axis_t (broadside-ness: 1 = fully broadside, 0 = nose
 // dead-on/dead-away), new spawns use radial motion instead of linear.
-const float AXIS_RADIAL_THRESHOLD = 0.5f;
+// 0.5 ~ nose tilted up to ~31 deg off dead-on/away still counts as radial;
+// 0.75 (current) extends that to ~50 deg.
+const float AXIS_RADIAL_THRESHOLD = 0.75f;
 
 // Assigns this particle a fresh position and motion mode, based on the
 // CURRENT ship orientation at the moment of spawn — the mode then stays
@@ -231,10 +259,11 @@ void setup()
         particles[i].layer = (i < NUM_FAR) ? 0 : (i < NUM_FAR + NUM_MID) ? 1 : 2;
         spawnParticle(particles[i], false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f); // linear; no flow direction yet at boot
         particles[i].brightness = random(50, 170); // used by the far layer only
+        particles[i].useWhite = random(0, 2) == 0; // far/mid only: coin-flip vs the layer's normal color
         switch (particles[i].layer) {
             case 0: particles[i].speed = (random(2, 7) / 10.0f) * FAR_SPEED_SCALE; break; // far: 0.2-0.6 * FAR_SPEED_SCALE
-            case 1: particles[i].speed = random(11, 20) / 10.0f; break;  // mid: 1.1 - 2.0
-            default: particles[i].speed = random(26, 45) / 10.0f; break; // near: 2.6 - 4.5
+            case 1: particles[i].speed = (random(11, 20) / 10.0f) * MID_SPEED_SCALE; break; // mid: 1.1-2.0 * MID_SPEED_SCALE
+            default: particles[i].speed = (random(26, 45) / 10.0f) * NEAR_SPEED_SCALE; break; // near: 2.6-4.5 * NEAR_SPEED_SCALE
         }
     }
 }
@@ -460,19 +489,19 @@ void loop()
             int hx = (int)particles[i].x;
             int hy = (int)particles[i].y;
 
-            if (DEBUG_UNIQUE_COLORS && particles[i].layer != 0) {
+            if (DEBUG_UNIQUE_COLORS && particles[i].layer == 2) {
                 // Bigger and uniformly sized so every particle stays easy
-                // to pick out and click identify in a screen dump. Far is
-                // exempted here as its real look is being reviewed now —
-                // the rest join back in one layer at a time.
+                // to pick out and click identify in a screen dump. Far and
+                // mid are exempted here as their real look is being
+                // reviewed now — near rejoins last.
                 canvas.fillRect(hx - 1, hy - 1, 2, 2, debugColorForIndex(i));
             } else if (particles[i].layer == 2) {
                 canvas.fillRect(hx - 1, hy - 1, 2, 2, COLOR_NEAR);
             } else if (particles[i].layer == 1) {
-                canvas.drawPixel(hx, hy, COLOR_DIM);
+                canvas.drawPixel(hx, hy, particles[i].useWhite ? COLOR_NEAR : COLOR_DIM);
             } else {
                 uint8_t v = particles[i].brightness;
-                canvas.drawPixel(hx, hy, tft.color565(v, v, v));
+                canvas.drawPixel(hx, hy, particles[i].useWhite ? COLOR_NEAR : tft.color565(v, v, v));
             }
         }
     }

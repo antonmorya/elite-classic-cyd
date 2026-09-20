@@ -36,11 +36,27 @@ const int NUM_TENTACLES = 12;
 const int TENTACLE_SEGMENTS = 8;
 const int NUM_BELL_VERTICES = BELL_RINGS * BELL_POINTS_PER_RING + 1;
 
-// Particle layers — each count is its own knob, tweak freely (also see
-// FAR_SPEED_SCALE in main.cpp for the far layer's speed).
-#define NUM_FAR 11
-#define NUM_MID 11
-#define NUM_NEAR 7
+// ============================================================================
+// PARTICLE TUNING — COUNTS (this file). SPEED and other behavior knobs
+// (FAR_SPEED_SCALE, MID_SPEED_SCALE, AUTO_ROTATE, SHOW_NEAR,
+// DEBUG_UNIQUE_COLORS, AXIS_RADIAL_THRESHOLD, ...) live near the top of
+// main.cpp instead — they have to be, since they're used inside loop().
+// Counts have to live HERE instead, because they size the particles[] array
+// at compile time, and this header is what everything else includes.
+// ============================================================================
+// Base count per layer times its own scale knob. Tweak the *_COUNT_SCALE
+// values to get more/fewer of a layer without recounting, or just edit
+// *_BASE_COUNT directly like a plain number if you don't need the knob.
+#define FAR_BASE_COUNT 30
+#define FAR_COUNT_SCALE 1.0
+#define MID_BASE_COUNT 15
+#define MID_COUNT_SCALE 1.0
+#define NEAR_BASE_COUNT 7
+#define NEAR_COUNT_SCALE 1.0
+
+#define NUM_FAR ((int)(FAR_BASE_COUNT * FAR_COUNT_SCALE))
+#define NUM_MID ((int)(MID_BASE_COUNT * MID_COUNT_SCALE))
+#define NUM_NEAR ((int)(NEAR_BASE_COUNT * NEAR_COUNT_SCALE))
 #define NUM_PARTICLES (NUM_FAR + NUM_MID + NUM_NEAR)
 
 // RGB LED Pins (Active Low)
