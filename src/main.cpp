@@ -18,7 +18,6 @@ InputHandler input;
 
 // Global state
 ColorMode current_mode = PURPLE;
-float user_y_offset = 0.0f;
 float phase = 0;
 float global_x_offset = 0.0f;
 float global_y_offset = 0.0f;
@@ -68,19 +67,31 @@ void setup()
     ledcAttach(TFT_BL_PIN, 5000, 8);
     ledcWrite(TFT_BL_PIN, input.getBrightness()); // Apply loaded brightness
 
+    // Distribute streaks across the ENTIRE screen (not a disk around the ship).
+    // Direction is NOT per-streak — all of them share the exact same heading
+    // vector (set in loop()), so they read as one strictly parallel motion
+    // cue. Three depth layers (far/mid/near), split evenly: far dots vary in
+    // brightness (a speckled background, barely creeping); mid is a single
+    // fixed dim gray, noticeably faster; near is white and fast — for
+    // mid/near, speed carries the distinction, not color.
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
         particles[i].x = random(0, SCREEN_WIDTH);
         particles[i].y = random(0, SCREEN_HEIGHT);
-        particles[i].speed = random(5, 15) / 10.0f;
-        particles[i].brightness = random(40, 180);
+        particles[i].layer = i % 3;
+        particles[i].brightness = random(50, 170); // used by the far layer only
+        switch (particles[i].layer) {
+            case 0: particles[i].speed = random(1, 4) / 10.0f; break;    // far: 0.1 - 0.3
+            case 1: particles[i].speed = random(6, 12) / 10.0f; break;   // mid: 0.6 - 1.1
+            default: particles[i].speed = random(15, 28) / 10.0f; break; // near: 1.5 - 2.7
+        }
     }
 }
 
 void loop()
 {
     // Input
-    input.update(current_mode, user_y_offset, angle_y);
+    input.update(current_mode, angle_x, angle_y);
     ledcWrite(TFT_BL_PIN,
               input.getBrightness()); // Update brightness dynamically
 
@@ -109,45 +120,75 @@ void loop()
     rotation_speed += (target_rotation_speed - rotation_speed) * 0.005f;
     angle_y += rotation_speed;
 
-    global_x_offset = sinf(phase * 0.15f) * 35.0f + cosf(phase * 0.25f) * 15.0f;
-    global_z_offset = sinf(phase * 0.1f) * 45.0f;
-    float drift_y = sinf(phase * 0.4f) * 15.0f + cosf(phase * 0.2f) * 10.0f;
-    float lift = cosf(phase) * 12.0f;
-    global_y_offset = drift_y - lift + user_y_offset;
+    // Ship stays centered and only rotates — global_x/y/z_offset stay at
+    // their 0 default (screen drift and camera zoom motion are disabled).
 
-    // Particles
+    // Recompute rotation first — we reuse it to find where the nose points.
+    updateRotationParams(angle_x, angle_y, angle_z);
+
+    // Flow direction = where the ship's nose actually points on screen right
+    // now (rotated nose vector, screen-space x/y — the perspective divide
+    // doesn't change its direction, only its length, so it can be skipped).
+    // ONE shared direction for all streaks, so they read as the ship's
+    // heading/motion.
+    //
+    // (Driving this straight from angle_y instead was tried — it rotates at
+    // a perfectly uniform rate, but that rate has nothing to do with which
+    // way the nose is actually facing once the fixed pitch tilt is factored
+    // in, so the streaks pointed off at an unrelated angle — even
+    // perpendicular to the ship's visible facing. The uneven rate you get
+    // from the real nose vector — slow for a while, then a fast swing — is
+    // not a bug, it's what the nose's screen position actually does under a
+    // fixed-pitch spin; matching it is what keeps the streaks correct.)
+    Point3D nose_r = rotateFast(Point3D{ 32.0f, -1.0f, 58.0f }); // cobra_vertices[0], recentred
+    float hdx = -nose_r.x;   // travel direction: nose -> rear
+    float hdy = -nose_r.y;
+    float hlen = sqrtf(hdx * hdx + hdy * hdy);
+    if (hlen < 1e-3f) { hdx = 0.0f; hdy = 1.0f; }   // nose aimed straight at camera
+    else { hdx /= hlen; hdy /= hlen; }
+
     int v_dir = input.getVerticalDir();
-    for (int i = 0; i < NUM_PARTICLES; i++)
+    const float flow_scale = (v_dir == -1) ? 4.0f : (v_dir == 1) ? -2.5f : 1.0f;
+
+    // Authentic Elite starfield: plain dots, not streaked lines. Far is a
+    // speckled 1x1 background of varying gray; mid is a fixed dim gray 1x1;
+    // near is a fixed white 2x2 — the only layer still large enough to read
+    // as "close". No orientation — a rotated 2x6 blip didn't read well.
+    const uint16_t COLOR_DIM = tft.color565(110, 110, 110);
+    const uint16_t COLOR_NEAR = tft.color565(255, 255, 255);
+
+    if (canvas.created())
     {
-        float p_speed = particles[i].speed;
-        if (v_dir == -1)
-            p_speed *= 4.0f; // Moving UP: Fast upward flow
-        else if (v_dir == 1)
-            p_speed *= -2.5f; // Moving DOWN: Reverse flow
-
-        particles[i].y -= p_speed;
-        particles[i].x += sinf(phase + i) * 0.3f;
-
-        // Wrap around logic
-        if (particles[i].y < 0)
+        for (int i = 0; i < NUM_PARTICLES; i++)
         {
-            particles[i].y = SCREEN_HEIGHT;
-            particles[i].x = random(0, SCREEN_WIDTH);
-        }
-        else if (particles[i].y > SCREEN_HEIGHT)
-        {
-            particles[i].y = 0;
-            particles[i].x = random(0, SCREEN_WIDTH);
-        }
+            // All streaks share the exact same direction — the heading —
+            // so they read unambiguously as ONE motion vector, not a hint
+            // of one buried in per-streak noise.
+            float spd = particles[i].speed * flow_scale;
+            particles[i].x += hdx * spd;
+            particles[i].y += hdy * spd;
 
-        uint16_t p_color =
-            tft.color565(0, particles[i].brightness, particles[i].brightness);
-        if (canvas.created())
-            canvas.drawPixel((int)particles[i].x, (int)particles[i].y, p_color);
+            // Toroidal wrap: re-enter from the opposite edge.
+            if (particles[i].x < 0) particles[i].x += SCREEN_WIDTH;
+            else if (particles[i].x >= SCREEN_WIDTH) particles[i].x -= SCREEN_WIDTH;
+            if (particles[i].y < 0) particles[i].y += SCREEN_HEIGHT;
+            else if (particles[i].y >= SCREEN_HEIGHT) particles[i].y -= SCREEN_HEIGHT;
+
+            int hx = (int)particles[i].x;
+            int hy = (int)particles[i].y;
+
+            if (particles[i].layer == 2) {
+                canvas.fillRect(hx - 1, hy - 1, 2, 2, COLOR_NEAR);
+            } else if (particles[i].layer == 1) {
+                canvas.drawPixel(hx, hy, COLOR_DIM);
+            } else {
+                uint8_t v = particles[i].brightness;
+                canvas.drawPixel(hx, hy, tft.color565(v, v, v));
+            }
+        }
     }
 
     // 3D Geometry — Cobra Mk III (wireframe, обчислюється всередині cobra.cpp)
-    updateRotationParams(angle_x, angle_y, angle_z);
 
     // Render
     if (canvas.created())
@@ -205,9 +246,11 @@ void loop()
             canvas.setCursor(5, SCREEN_HEIGHT - 90);
             canvas.printf("YAW: %.2f", angle_y);
             canvas.setCursor(5, SCREEN_HEIGHT - 100);
-            canvas.printf("Y_OFF: %.0f", user_y_offset);
+            canvas.printf("PITCH: %.2f", angle_x);
             canvas.setCursor(5, SCREEN_HEIGHT - 110);
             canvas.printf("BRI: %d", input.getBrightness());
+            canvas.setCursor(5, SCREEN_HEIGHT - 120);
+            canvas.printf("HDG: %.0fdeg", atan2f(hdy, hdx) * 180.0f / PI);
         }
 
         canvas.pushSprite(0, 0);

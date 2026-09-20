@@ -13,7 +13,7 @@ class InputHandler {
     InputHandler();
     void begin();
     void loadSettings(ColorMode &mode);
-    void update(ColorMode &mode, float &user_y_offset, float &angle_y);
+    void update(ColorMode &mode, float &angle_x, float &angle_y);
     uint8_t getBrightness() const;
     bool isDebugMode() const { return show_debug; }
     bool isWireframeMode() const { return wireframe_mode; }

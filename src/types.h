@@ -24,7 +24,8 @@ struct Triangle {
 struct Particle {
     float x, y;
     float speed;
-    uint8_t brightness;
+    uint8_t layer;      // 0 = far, 1 = mid, 2 = near
+    uint8_t brightness; // far only: varies per-dot; mid/near use a fixed color
 };
 
 #endif

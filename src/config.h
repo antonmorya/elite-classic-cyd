@@ -36,8 +36,8 @@ const int NUM_TENTACLES = 12;
 const int TENTACLE_SEGMENTS = 8;
 const int NUM_BELL_VERTICES = BELL_RINGS * BELL_POINTS_PER_RING + 1;
 
-// Particles
-#define NUM_PARTICLES 50
+// Particles (33 = 11 far + 11 mid + 11 near)
+#define NUM_PARTICLES 33
 
 // RGB LED Pins (Active Low)
 #define LED_R_PIN 4

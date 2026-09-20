@@ -24,7 +24,7 @@ uint8_t InputHandler::getBrightness() const {
     return levels[brightness_idx % 4];
 }
 
-void InputHandler::update(ColorMode &mode, float &user_y_offset,
+void InputHandler::update(ColorMode &mode, float &angle_x,
                           float &angle_y) {
     bool btn_state = digitalRead(BTN_PIN);
     bool touch_trigger = false;
@@ -49,13 +49,14 @@ void InputHandler::update(ColorMode &mode, float &user_y_offset,
             }
         }
 
-        // Horizontal Strips (Move UP/DOWN)
+        // Horizontal Strips: Pitch rotation (mirrors left/right yaw below,
+        // unbounded — same free spin, just around the other axis).
         if(tx <= SCREEN_WIDTH - 40) {
             if(ty < 45) {
-                user_y_offset -= 4.0f;
+                angle_x -= 0.04f;
                 vertical_dir = -1;
             } else if(ty > SCREEN_HEIGHT - 45) {
-                user_y_offset += 4.0f;
+                angle_x += 0.04f;
                 vertical_dir = 1;
             }
         }
@@ -74,12 +75,6 @@ void InputHandler::update(ColorMode &mode, float &user_y_offset,
                     touch_trigger = true;
             }
         }
-
-        // Clamp Y offset
-        if(user_y_offset < -220.0f)
-            user_y_offset = -220.0f;
-        if(user_y_offset > 220.0f)
-            user_y_offset = 220.0f;
     }
 
     // BOOT Button: Cycle Brightness
