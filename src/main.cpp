@@ -123,29 +123,13 @@ void loop()
     // Ship stays centered and only rotates — global_x/y/z_offset stay at
     // their 0 default (screen drift and camera zoom motion are disabled).
 
-    // Recompute rotation first — we reuse it to find where the nose points.
     updateRotationParams(angle_x, angle_y, angle_z);
 
-    // Flow direction = where the ship's nose actually points on screen right
-    // now (rotated nose vector, screen-space x/y — the perspective divide
-    // doesn't change its direction, only its length, so it can be skipped).
-    // ONE shared direction for all streaks, so they read as the ship's
-    // heading/motion.
-    //
-    // (Driving this straight from angle_y instead was tried — it rotates at
-    // a perfectly uniform rate, but that rate has nothing to do with which
-    // way the nose is actually facing once the fixed pitch tilt is factored
-    // in, so the streaks pointed off at an unrelated angle — even
-    // perpendicular to the ship's visible facing. The uneven rate you get
-    // from the real nose vector — slow for a while, then a fast swing — is
-    // not a bug, it's what the nose's screen position actually does under a
-    // fixed-pitch spin; matching it is what keeps the streaks correct.)
-    Point3D nose_r = rotateFast(Point3D{ 32.0f, -1.0f, 58.0f }); // cobra_vertices[0], recentred
-    float hdx = -nose_r.x;   // travel direction: nose -> rear
-    float hdy = -nose_r.y;
-    float hlen = sqrtf(hdx * hdx + hdy * hdy);
-    if (hlen < 1e-3f) { hdx = 0.0f; hdy = 1.0f; }   // nose aimed straight at camera
-    else { hdx /= hlen; hdy /= hlen; }
+    // Flow direction is fixed (straight up the screen) — tying it to the
+    // ship's nose orientation was tried and removed: now that streaks are
+    // plain dots with no orientation to show, there was nothing left for
+    // that ship-relative direction to actually do.
+    const float hdx = 0.0f, hdy = -1.0f;
 
     int v_dir = input.getVerticalDir();
     const float flow_scale = (v_dir == -1) ? 4.0f : (v_dir == 1) ? -2.5f : 1.0f;
@@ -249,8 +233,6 @@ void loop()
             canvas.printf("PITCH: %.2f", angle_x);
             canvas.setCursor(5, SCREEN_HEIGHT - 110);
             canvas.printf("BRI: %d", input.getBrightness());
-            canvas.setCursor(5, SCREEN_HEIGHT - 120);
-            canvas.printf("HDG: %.0fdeg", atan2f(hdy, hdx) * 180.0f / PI);
         }
 
         canvas.pushSprite(0, 0);
