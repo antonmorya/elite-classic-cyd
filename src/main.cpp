@@ -196,7 +196,7 @@ void loop()
     // motion visibly non-linear (each streak nudged by its own fixed
     // per-particle radial component), which is exactly what a "speed
     // direction" cue must not do.
-    Point3D nose_r = rotateFast(Point3D{ 32.0f, -1.0f, 58.0f }); // cobra_vertices[0], recentred
+    Point3D nose_r = rotateFast(Point3D{ -32.0f, 1.0f, 58.0f }); // cobra_vertices[0], recentred
     float raw_x = -nose_r.x;   // travel direction: nose -> tail
     float raw_y = -nose_r.y;
     float in_plane_len = sqrtf(raw_x * raw_x + raw_y * raw_y);
