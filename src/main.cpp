@@ -67,10 +67,6 @@ float CAMERA_DIST = 500.0f;
 
 // Global state
 ColorMode current_mode = PURPLE;
-float phase = 0;
-float global_x_offset = 0.0f;
-float global_y_offset = 0.0f;
-float global_z_offset = 0.0f;
 float angle_x = -0.5f, angle_y = 0.4f, angle_z = 0.0f;
 float rotation_speed = 0.005f;
 float target_rotation_speed = 0.005f;
@@ -334,13 +330,6 @@ void loop()
         canvas.fillScreen(CL_BG);
     }
 
-    // Animation Math
-    phase += 0.08f + (random(-10, 11) / 1000.0f); // Add slight randomness
-    if (phase > 2.0f * PI * 100.0f)
-    {
-        phase -= 2.0f * PI * 100.0f;
-    }
-
     // Slow autonomous rotation around body axis (Y-axis)
     // Randomize target speed every 45 seconds
     if (millis() - last_rotation_change > 45000)
@@ -514,7 +503,7 @@ void loop()
         bool wireframe = input.isWireframeMode();
         int faces_visible = 0;
         drawCobra(canvas, angle_x, angle_y, angle_z,
-                  global_x_offset, global_y_offset, global_z_offset,
+                  0.0f, 0.0f, 0.0f,
                   getJellyfishColor(current_mode), wireframe, &faces_visible);
 
         // Debug Touch Zones (Dotted Lines for "thinner" look)

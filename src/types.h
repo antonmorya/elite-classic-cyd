@@ -15,12 +15,6 @@ struct Point2D {
     bool valid;
 };
 
-struct Triangle {
-    int v[3]; // Indices of vertices
-    float avgZ;
-    bool visible;
-};
-
 struct Particle {
     float x, y;
     float speed;

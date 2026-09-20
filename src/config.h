@@ -29,13 +29,6 @@ const uint16_t TOUCH_MAX_X = 3800;
 const uint16_t TOUCH_MIN_Y = 250;
 const uint16_t TOUCH_MAX_Y = 3850;
 
-// Geometry configuration
-const int BELL_RINGS = 4;
-const int BELL_POINTS_PER_RING = 12;
-const int NUM_TENTACLES = 12;
-const int TENTACLE_SEGMENTS = 8;
-const int NUM_BELL_VERTICES = BELL_RINGS * BELL_POINTS_PER_RING + 1;
-
 // ============================================================================
 // PARTICLE TUNING — COUNTS (this file). SPEED and other behavior knobs
 // (FAR_SPEED_SCALE, MID_SPEED_SCALE, AUTO_ROTATE, SHOW_NEAR,
